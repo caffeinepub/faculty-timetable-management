@@ -38,6 +38,7 @@ import {
   MapPin,
   Plus,
   Trash2,
+  UserX,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -52,8 +53,6 @@ import { useCourseStore } from "../../store/useCourseStore";
 import { useDepartmentStore } from "../../store/useDepartmentStore";
 import { useTimetableStore } from "../../store/useTimetableStore";
 import type { FacultyProfile } from "../../types/models";
-
-const CURRENT_TEACHER_ID = "teacher-1";
 
 const TIME_OPTIONS = [
   "8 AM",
@@ -116,7 +115,10 @@ interface Props {
   profile?: FacultyProfile | null;
 }
 
-export function FacultyBillEntry({ profile: _profile }: Props) {
+export function FacultyBillEntry({ profile }: Props) {
+  // Use the real logged-in teacher's ID from profile
+  const teacherId = profile?.id ?? "";
+
   const { bills, addBill, updateBillStatus, deleteBill } = useBillingStore();
   const { courses, getDepartmentsByTeacher, getAssignmentsByDeptAndTeacher } =
     useCourseStore();
@@ -145,8 +147,8 @@ export function FacultyBillEntry({ profile: _profile }: Props) {
 
   // ---- Teacher's departments ----
   const teacherDeptIds = useMemo(
-    () => getDepartmentsByTeacher(CURRENT_TEACHER_ID),
-    [getDepartmentsByTeacher],
+    () => (teacherId ? getDepartmentsByTeacher(teacherId) : []),
+    [getDepartmentsByTeacher, teacherId],
   );
 
   const teacherDepts = useMemo(
@@ -160,9 +162,9 @@ export function FacultyBillEntry({ profile: _profile }: Props) {
 
   // ---- Courses for selected dept ----
   const deptAssignments = useMemo(() => {
-    if (!selDept) return [];
-    return getAssignmentsByDeptAndTeacher(CURRENT_TEACHER_ID, selDept);
-  }, [selDept, getAssignmentsByDeptAndTeacher]);
+    if (!selDept || !teacherId) return [];
+    return getAssignmentsByDeptAndTeacher(teacherId, selDept);
+  }, [selDept, getAssignmentsByDeptAndTeacher, teacherId]);
 
   const deptCourseIds = useMemo(
     () => [...new Set(deptAssignments.map((a) => a.courseId))],
@@ -201,23 +203,33 @@ export function FacultyBillEntry({ profile: _profile }: Props) {
   const paperCode = selectedAssignment?.paperCode ?? "";
 
   // ---- Room no from timetable ----
+  // Try matching by paper code on timetable subjects first,
+  // then fall back to matching timetable entry directly for this teacher.
   const roomNo = useMemo(() => {
     if (!paperCode) return "";
+    // Try matching timetable subject by code
     const subjectMatch = subjects.find((s) => s.code === paperCode);
-    if (!subjectMatch)
-      return "Not scheduled / \u0936\u0947\u0921\u094d\u092f\u0942\u0932 \u0928\u0939\u0940\u0902";
-    const entry = timetableEntries.find(
-      (e) =>
-        e.subjectId === subjectMatch.id && e.teacherId === CURRENT_TEACHER_ID,
-    );
-    if (!entry)
-      return "Not scheduled / \u0936\u0947\u0921\u094d\u092f\u0942\u0932 \u0928\u0939\u0940\u0902";
-    const room = rooms.find((r) => r.id === entry.roomId);
-    return (
-      room?.name ??
-      "Not scheduled / \u0936\u0947\u0921\u094d\u092f\u0942\u0932 \u0928\u0939\u0940\u0902"
-    );
-  }, [paperCode, subjects, timetableEntries, rooms]);
+    if (subjectMatch) {
+      const entry = timetableEntries.find(
+        (e) =>
+          e.subjectId === subjectMatch.id &&
+          (teacherId ? e.teacherId === teacherId : true),
+      );
+      if (entry) {
+        const room = rooms.find((r) => r.id === entry.roomId);
+        if (room) return room.name;
+      }
+    }
+    // Fallback: search timetable entries by teacherId + any subject that contains paperCode in name
+    if (teacherId) {
+      const entry = timetableEntries.find((e) => e.teacherId === teacherId);
+      if (entry) {
+        const room = rooms.find((r) => r.id === entry.roomId);
+        if (room) return room.name;
+      }
+    }
+    return "Not scheduled / \u0936\u0947\u0921\u094d\u092f\u0942\u0932 \u0928\u0939\u0940\u0902";
+  }, [paperCode, subjects, timetableEntries, rooms, teacherId]);
 
   // ---- Hours calculation ----
   const hoursCalculated = useMemo(() => {
@@ -245,12 +257,12 @@ export function FacultyBillEntry({ profile: _profile }: Props) {
   const teacherBills = useMemo(
     () =>
       bills
-        .filter((b) => b.teacherId === CURRENT_TEACHER_ID)
+        .filter((b) => b.teacherId === teacherId)
         .sort(
           (a, b) =>
             new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
         ),
-    [bills],
+    [bills, teacherId],
   );
 
   const filteredBills = useMemo(() => {
@@ -331,11 +343,11 @@ export function FacultyBillEntry({ profile: _profile }: Props) {
   }
 
   function handleAddEntry() {
-    if (!canSubmitForm()) return;
+    if (!canSubmitForm() || !teacherId) return;
     const { month, year } = getMonthYear(selDate);
 
     addBill({
-      teacherId: CURRENT_TEACHER_ID,
+      teacherId,
       date: selDate,
       subjectId: selectedAssignment?.id ?? "",
       batchId: "",
@@ -404,6 +416,18 @@ export function FacultyBillEntry({ profile: _profile }: Props) {
 
   const { month: derivedMonth, year: derivedYear } = getMonthYear(selDate);
 
+  // ---- No teacher ID guard ----
+  if (!teacherId) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] text-muted-foreground">
+        <UserX className="w-12 h-12 mb-3 opacity-30" />
+        <p className="text-sm font-medium">
+          Profile not loaded. Please log in again.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -449,6 +473,25 @@ export function FacultyBillEntry({ profile: _profile }: Props) {
             </DialogHeader>
 
             <div className="space-y-5 py-2">
+              {/* No assignments warning */}
+              {teacherDepts.length === 0 && (
+                <div className="flex items-start gap-2 rounded-lg border border-orange-200 bg-orange-50 p-3">
+                  <AlertCircle className="w-4 h-4 text-orange-500 flex-shrink-0 mt-0.5" />
+                  <div className="text-sm">
+                    <p className="font-semibold text-orange-700">
+                      No course assignments found / \u0915\u094b\u0908
+                      \u0915\u094b\u0930\u094d\u0938
+                      \u0905\u0938\u093e\u0907\u0928\u092e\u0947\u0902\u091f
+                      \u0928\u0939\u0940\u0902 \u092e\u093f\u0932\u093e
+                    </p>
+                    <p className="text-orange-600 text-xs mt-0.5">
+                      Please ask the admin to assign you to a course and
+                      department first.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* Row 1: Department + Course */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
