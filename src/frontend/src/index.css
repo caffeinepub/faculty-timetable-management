@@ -1,0 +1,103 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@font-face {
+  font-family: "Plus Jakarta Sans";
+  src: url("/assets/fonts/PlusJakartaSans.woff2") format("woff2");
+  font-weight: 200 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@layer base {
+  :root {
+    --radius: 0.75rem;
+    /* Navy sidebar: deep navy #0B2E57 -> oklch(0.265 0.075 243) */
+    --sidebar: 0.265 0.075 243;
+    --sidebar-foreground: 0.97 0.005 243;
+    --sidebar-primary: 0.62 0.12 177;
+    --sidebar-primary-foreground: 0.99 0 0;
+    --sidebar-accent: 0.31 0.068 243;
+    --sidebar-accent-foreground: 0.97 0.005 243;
+    --sidebar-border: 0.32 0.06 243;
+    --sidebar-ring: 0.62 0.12 177;
+
+    /* Main background: #F3F5F7 -> oklch(0.965 0.006 243) */
+    --background: 0.965 0.006 243;
+    --foreground: 0.13 0.015 243;
+
+    /* Cards/surfaces: white #FFFFFF */
+    --card: 1 0 0;
+    --card-foreground: 0.13 0.015 243;
+    --popover: 1 0 0;
+    --popover-foreground: 0.13 0.015 243;
+
+    /* Primary: teal-green #2FB7A6 -> oklch(0.68 0.12 177) */
+    --primary: 0.68 0.12 177;
+    --primary-foreground: 0.99 0 0;
+
+    /* Secondary: light gray */
+    --secondary: 0.94 0.006 243;
+    --secondary-foreground: 0.28 0.02 243;
+
+    --muted: 0.94 0.006 243;
+    --muted-foreground: 0.52 0.018 243;
+
+    --accent: 0.9 0.015 177;
+    --accent-foreground: 0.28 0.08 177;
+
+    --destructive: 0.577 0.245 27.325;
+    --destructive-foreground: 0.985 0 0;
+
+    /* Borders: #E3E7EC -> oklch(0.91 0.01 243) */
+    --border: 0.91 0.01 243;
+    --input: 0.91 0.01 243;
+    --ring: 0.68 0.12 177;
+
+    /* Chart colors matching timetable event blocks */
+    --chart-1: 0.78 0.1 177;
+    --chart-2: 0.75 0.04 243;
+    --chart-3: 0.82 0.1 88;
+    --chart-4: 0.53 0.1 177;
+    --chart-5: 0.65 0.18 27;
+
+    /* Custom tokens */
+    --navy-deep: 0.22 0.075 243;
+    --teal-active: 0.68 0.12 177;
+    --teal-mint: 0.82 0.08 177;
+    --mustard: 0.82 0.1 88;
+    --dark-teal: 0.53 0.1 177;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: "Plus Jakarta Sans", "Inter", -apple-system, BlinkMacSystemFont,
+      sans-serif;
+  }
+
+  /* Devanagari font support */
+  .hindi-text {
+    font-family: "Noto Sans Devanagari", "Plus Jakarta Sans", sans-serif;
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: oklch(0.75 0.01 243);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: oklch(0.65 0.015 243);
+  }
+}
