@@ -22,11 +22,7 @@ import { motion } from "motion/react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useBankStore } from "../../store/useBankStore";
-import {
-  TDS_RATE,
-  TDS_THRESHOLD,
-  useBillingStore,
-} from "../../store/useBillingStore";
+import { TDS_RATE, useBillingStore } from "../../store/useBillingStore";
 import { useFacultyStore } from "../../store/useFacultyStore";
 
 export function RtgsPayments() {
@@ -51,7 +47,7 @@ export function RtgsPayments() {
   const teacherPaymentRows = Object.entries(approvedByTeacher).map(
     ([teacherId, teacherBills]) => {
       const gross = teacherBills.reduce((s, b) => s + b.totalAmount, 0);
-      const tds = gross > TDS_THRESHOLD ? gross * TDS_RATE : 0;
+      const tds = Math.round(gross * TDS_RATE);
       const net = gross - tds;
       return { teacherId, bills: teacherBills, gross, tds, net };
     },

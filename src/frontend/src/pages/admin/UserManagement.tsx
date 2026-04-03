@@ -695,6 +695,7 @@ export function UserManagement() {
   const { actor } = useActor();
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
@@ -710,12 +711,28 @@ export function UserManagement() {
 
   const loadUsers = useCallback(async () => {
     if (!actor) return;
+    setLoadError(null);
     setIsLoading(true);
     try {
       const list = await actor.listAllUsers();
       setUsers(list);
     } catch (err: any) {
-      toast.error(`Failed to load users: ${err?.message ?? "Unknown error"}`);
+      const msg: string = err?.message ?? "Unknown error";
+      const isCanisterStopped =
+        msg.includes("IC0508") ||
+        msg.includes("is stopped") ||
+        msg.includes("Reject code: 5") ||
+        msg.includes(
+          "stopped and therefore does not have a CallContextManager",
+        );
+      if (isCanisterStopped) {
+        setLoadError(
+          "The backend service is temporarily unavailable. The canister may be upgrading or restarting. Please try again in a moment.",
+        );
+      } else {
+        setLoadError(msg);
+        toast.error(`Failed to load users: ${msg}`);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -1051,6 +1068,28 @@ export function UserManagement() {
               <span className="text-sm text-muted-foreground ml-3">
                 Loading users...
               </span>
+            </div>
+          ) : loadError ? (
+            <div
+              className="flex flex-col items-center justify-center py-16 text-center px-6"
+              data-ocid="users.error_state"
+            >
+              <AlertCircle className="w-10 h-10 text-destructive/60 mb-3" />
+              <p className="text-sm font-medium text-foreground mb-1">
+                Unable to load users
+              </p>
+              <p className="text-xs text-muted-foreground mt-1 max-w-md">
+                {loadError}
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-4"
+                onClick={loadUsers}
+                data-ocid="users.button"
+              >
+                Retry
+              </Button>
             </div>
           ) : users.length === 0 ? (
             <div

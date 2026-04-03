@@ -1,18 +1,28 @@
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import {
   AlertTriangle,
   Bell,
   Calendar,
+  CalendarOff,
   CheckCircle,
   Clock,
   FileText,
+  Newspaper,
+  Star,
+  TrendingUp,
 } from "lucide-react";
 import { motion } from "motion/react";
 import { useMemo } from "react";
+import { useNavigation } from "../../App";
 import { BillStatusBadge } from "../../components/BillStatusBadge";
-import { TDS_THRESHOLD, useBillingStore } from "../../store/useBillingStore";
+import { useBillingStore } from "../../store/useBillingStore";
+import { useLeaveStore } from "../../store/useLeaveStore";
+import { useNoticeBoardStore } from "../../store/useNoticeBoardStore";
 import { useNotificationStore } from "../../store/useNotificationStore";
+import { usePerformanceStore } from "../../store/usePerformanceStore";
 import { useTimetableStore } from "../../store/useTimetableStore";
 import type { FacultyProfile } from "../../types/models";
 
@@ -20,11 +30,21 @@ interface TeacherDashboardProps {
   profile: FacultyProfile;
 }
 
+const PRIORITY_LEFT_BORDER: Record<string, string> = {
+  Urgent: "border-l-4 border-l-red-500",
+  Important: "border-l-4 border-l-amber-500",
+  Normal: "",
+};
+
 export function TeacherDashboard({ profile }: TeacherDashboardProps) {
+  const { navigate } = useNavigation();
   const { entries, subjects, rooms, batches } = useTimetableStore();
   const { getBillsByTeacher, calculateMonthlyEarnings } = useBillingStore();
   const { getNotificationsForUser, getUnreadCount, isRead } =
     useNotificationStore();
+  const { getApprovedLeavesCount } = useLeaveStore();
+  const { getActiveNotices } = useNoticeBoardStore();
+  const { getAverageScore, getReviewsByTeacher } = usePerformanceStore();
 
   const myEntries = entries.filter((e) => e.teacherId === profile.id);
   const today = new Date();
@@ -38,7 +58,6 @@ export function TeacherDashboard({ profile }: TeacherDashboardProps) {
     "Saturday",
   ];
   const todayDay = dayNames[today.getDay()];
-
   const todaySchedule = myEntries.filter((e) => e.day === todayDay);
   const myBills = getBillsByTeacher(profile.id);
   const pendingBills = myBills.filter(
@@ -57,10 +76,34 @@ export function TeacherDashboard({ profile }: TeacherDashboardProps) {
     [profile.id, calculateMonthlyEarnings, today],
   );
 
-  const tdsWarning =
-    monthlyEarnings.gross > TDS_THRESHOLD * 0.8 &&
-    monthlyEarnings.gross <= TDS_THRESHOLD;
-  const tdsApplied = monthlyEarnings.gross > TDS_THRESHOLD;
+  const casualRemaining = Math.max(
+    0,
+    12 - getApprovedLeavesCount(profile.id, "Casual", today.getFullYear()),
+  );
+  const sickRemaining = Math.max(
+    0,
+    10 - getApprovedLeavesCount(profile.id, "Sick", today.getFullYear()),
+  );
+
+  const monthlyLimit = profile.monthlyLimit ?? 45000;
+  const earningsPercent = Math.min(
+    Math.round((monthlyEarnings.gross / monthlyLimit) * 100),
+    100,
+  );
+  const tdsApplied = monthlyEarnings.tds > 0;
+
+  const activeNotices = useMemo(() => getActiveNotices(), [getActiveNotices]);
+  const noticePreview = activeNotices.slice(0, 3);
+
+  // Performance summary
+  const avgScore = useMemo(
+    () => getAverageScore(profile.id),
+    [profile.id, getAverageScore],
+  );
+  const myReviews = useMemo(
+    () => getReviewsByTeacher(profile.id),
+    [profile.id, getReviewsByTeacher],
+  );
 
   return (
     <motion.div
@@ -91,28 +134,69 @@ export function TeacherDashboard({ profile }: TeacherDashboardProps) {
             <span className="text-white/60">This month:</span>{" "}
             <strong>₹{monthlyEarnings.gross.toLocaleString("en-IN")}</strong>
           </div>
+          {avgScore > 0 && (
+            <div className="bg-white/10 rounded-lg px-3 py-1.5 text-sm">
+              <span className="text-white/60">Performance:</span>{" "}
+              <strong>{avgScore}/10</strong>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* TDS warnings */}
-      {tdsWarning && (
-        <div
-          className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl p-4"
-          data-ocid="teacher_dashboard.warning"
+      {/* Quick Actions */}
+      <div className="flex flex-wrap gap-3">
+        <Button
+          size="sm"
+          onClick={() => navigate("/teacher/leave")}
+          className="gap-2"
+          data-ocid="teacher_dashboard.apply_leave.button"
         >
-          <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-semibold text-amber-700">
-              टीडीएस सीमा नजदीक / Approaching TDS Limit
-            </p>
-            <p className="text-xs text-amber-600">
-              Your earnings (₹{monthlyEarnings.gross.toLocaleString("en-IN")})
-              are approaching the TDS threshold of ₹45,000. TDS of 10% will be
-              deducted.
-            </p>
-          </div>
-        </div>
-      )}
+          <CalendarOff className="w-4 h-4" />
+          Apply Leave
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => navigate("/teacher/earnings")}
+          className="gap-2"
+          data-ocid="teacher_dashboard.view_earnings.button"
+        >
+          <TrendingUp className="w-4 h-4" />
+          View Earnings
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => navigate("/teacher/bills")}
+          className="gap-2"
+          data-ocid="teacher_dashboard.submit_bill.button"
+        >
+          <FileText className="w-4 h-4" />
+          Submit Bill
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => navigate("/teacher/noticeboard")}
+          className="gap-2"
+          data-ocid="teacher_dashboard.view_notices.button"
+        >
+          <Newspaper className="w-4 h-4" />
+          Notice Board
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => navigate("/teacher/performance")}
+          className="gap-2"
+          data-ocid="teacher_dashboard.performance.button"
+        >
+          <Star className="w-4 h-4" />
+          My Performance
+        </Button>
+      </div>
+
+      {/* TDS warnings */}
       {tdsApplied && (
         <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl p-4">
           <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
@@ -121,12 +205,88 @@ export function TeacherDashboard({ profile }: TeacherDashboardProps) {
               टीडीएस लागू / TDS Applied
             </p>
             <p className="text-xs text-red-600">
-              Gross: ₹{monthlyEarnings.gross.toLocaleString("en-IN")} &rarr;
-              TDS: ₹{monthlyEarnings.tds.toLocaleString("en-IN")} &rarr; Net: ₹
+              Gross: ₹{monthlyEarnings.gross.toLocaleString("en-IN")} − TDS 10%:
+              ₹{monthlyEarnings.tds.toLocaleString("en-IN")} = Net: ₹
               {monthlyEarnings.net.toLocaleString("en-IN")}
             </p>
           </div>
         </div>
+      )}
+
+      {/* Earnings progress bar */}
+      {monthlyLimit && monthlyLimit > 0 && (
+        <Card className="border-border shadow-card">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <p className="text-sm font-semibold">
+                  मासिक कमाई / Monthly Earnings
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Limit: ₹{monthlyLimit.toLocaleString("en-IN")}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-lg font-extrabold">
+                  ₹{monthlyEarnings.gross.toLocaleString("en-IN")}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {earningsPercent}% used
+                </p>
+              </div>
+            </div>
+            <Progress
+              value={earningsPercent}
+              className={`h-2.5 ${
+                earningsPercent >= 90
+                  ? "[&>div]:bg-red-500"
+                  : earningsPercent >= 70
+                    ? "[&>div]:bg-amber-500"
+                    : "[&>div]:bg-green-500"
+              }`}
+              data-ocid="teacher_dashboard.earnings_progress"
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Performance summary card */}
+      {myReviews.length > 0 && (
+        <Card className="border-border shadow-card border-amber-200 bg-amber-50/30">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+                  <Star className="w-5 h-5 text-amber-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">
+                    मेरा प्रदर्शन / My Performance
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Based on {myReviews.length} review
+                    {myReviews.length > 1 ? "s" : ""}
+                  </p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-2xl font-bold text-amber-700">
+                  {avgScore}
+                  <span className="text-sm text-muted-foreground">/10</span>
+                </p>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 text-xs text-primary"
+                  onClick={() => navigate("/teacher/performance")}
+                  data-ocid="teacher_dashboard.view_performance.button"
+                >
+                  View Details →
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Stats */}
@@ -187,8 +347,37 @@ export function TeacherDashboard({ profile }: TeacherDashboardProps) {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Today's schedule */}
+      {/* Leave balance mini cards */}
+      <div className="grid grid-cols-2 gap-3">
+        <Card className="border-border shadow-card">
+          <CardContent className="p-3 flex items-center gap-3">
+            <CalendarOff className="w-5 h-5 text-primary" />
+            <div>
+              <div className="text-lg font-bold">{casualRemaining}</div>
+              <div className="text-xs font-medium">Casual Leave</div>
+              <div className="text-[10px] text-muted-foreground">
+                आकस्मिक छुट्टी शेष
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-border shadow-card">
+          <CardContent className="p-3 flex items-center gap-3">
+            <CalendarOff className="w-5 h-5 text-destructive" />
+            <div>
+              <div className="text-lg font-bold">{sickRemaining}</div>
+              <div className="text-xs font-medium">Sick Leave</div>
+              <div className="text-[10px] text-muted-foreground">
+                बीमारी छुट्टी शेष
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Main two-column section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Today Schedule */}
         <Card className="border-border shadow-card">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold">
@@ -199,18 +388,16 @@ export function TeacherDashboard({ profile }: TeacherDashboardProps) {
             className="pt-0 space-y-2"
             data-ocid="teacher_schedule.list"
           >
-            {todaySchedule.length === 0 && (
+            {todaySchedule.length === 0 ? (
               <div
-                className="text-center py-8 text-muted-foreground"
+                className="text-center py-6 text-muted-foreground"
                 data-ocid="teacher_schedule.empty_state"
               >
-                <Calendar className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                <CheckCircle className="w-8 h-8 mx-auto mb-2 opacity-30" />
                 <p className="text-sm">आज कोई कक्षा नहीं / No classes today</p>
               </div>
-            )}
-            {todaySchedule
-              .sort((a, b) => a.startTime.localeCompare(b.startTime))
-              .map((entry, i) => {
+            ) : (
+              todaySchedule.map((entry, i) => {
                 const subject = subjects.find((s) => s.id === entry.subjectId);
                 const room = rooms.find((r) => r.id === entry.roomId);
                 const batch = batches.find((b) => b.id === entry.batchId);
@@ -223,7 +410,7 @@ export function TeacherDashboard({ profile }: TeacherDashboardProps) {
                     <div className="w-1 h-10 rounded-full bg-primary flex-shrink-0" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-foreground truncate">
-                        {subject?.code} &mdash; {subject?.name}
+                        {subject?.code} — {subject?.name}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {room?.name} &bull; {batch?.name}
@@ -237,7 +424,8 @@ export function TeacherDashboard({ profile }: TeacherDashboardProps) {
                     </div>
                   </div>
                 );
-              })}
+              })
+            )}
           </CardContent>
         </Card>
 
@@ -304,6 +492,75 @@ export function TeacherDashboard({ profile }: TeacherDashboardProps) {
           </CardContent>
         </Card>
       </div>
+
+      {/* Notice Board Preview */}
+      <Card className="border-border shadow-card">
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <Newspaper className="w-4 h-4 text-primary" />
+              सूचना पट्ट / Notice Board
+            </CardTitle>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 text-xs"
+              onClick={() => navigate("/teacher/noticeboard")}
+              data-ocid="teacher_dashboard.notices_view_all.button"
+            >
+              View All →
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent
+          className="pt-0 space-y-2"
+          data-ocid="teacher_notices.list"
+        >
+          {noticePreview.length === 0 ? (
+            <div
+              className="text-center py-4 text-muted-foreground text-sm"
+              data-ocid="teacher_notices.empty_state"
+            >
+              No active notices
+            </div>
+          ) : (
+            noticePreview.map((notice, i) => (
+              <div
+                key={notice.id}
+                className={`p-3 rounded-lg border bg-secondary ${
+                  PRIORITY_LEFT_BORDER[notice.priority] ?? ""
+                }`}
+                data-ocid={`teacher_notices.item.${i + 1}`}
+              >
+                <div className="flex items-start gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <Badge
+                        variant="outline"
+                        className={`text-[9px] px-1 py-0 ${
+                          notice.priority === "Urgent"
+                            ? "bg-red-100 text-red-700"
+                            : notice.priority === "Important"
+                              ? "bg-amber-100 text-amber-700"
+                              : "bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        {notice.priority}
+                      </Badge>
+                    </div>
+                    <p className="text-xs font-semibold mt-1 truncate">
+                      {notice.title}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {new Date(notice.postedAt).toLocaleDateString("en-IN")}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
 
       {/* Recent bills */}
       {myBills.length > 0 && (

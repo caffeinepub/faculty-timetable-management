@@ -1,12 +1,15 @@
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ClipboardCheck, Clock, FileText } from "lucide-react";
+import { BarChart2, ClipboardCheck, Clock, FileText } from "lucide-react";
 import { motion } from "motion/react";
+import { useNavigation } from "../../App";
 import { BillStatusBadge } from "../../components/BillStatusBadge";
 import { useBillingStore } from "../../store/useBillingStore";
 import { useFacultyStore } from "../../store/useFacultyStore";
 
 export function CheckerDashboard() {
+  const { navigate } = useNavigation();
   const { bills } = useBillingStore();
   const { getFacultyById } = useFacultyStore();
 
@@ -20,10 +23,20 @@ export function CheckerDashboard() {
   const allPending = bills.filter(
     (b) => b.status === "Submitted" || b.status === "Checked",
   );
-  const checkedToday = bills.filter((b) => {
-    if (b.status !== "Checked") return false;
-    const today = new Date().toISOString().split("T")[0];
-    return b.checkedAt?.startsWith(today);
+
+  const now = new Date();
+  const checkedThisMonth = bills.filter((b) => {
+    if (
+      b.status !== "Checked" &&
+      b.status !== "Approved" &&
+      b.status !== "Rejected"
+    )
+      return false;
+    if (!b.checkedAt) return false;
+    const d = new Date(b.checkedAt);
+    return (
+      d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
+    );
   });
 
   return (
@@ -33,6 +46,30 @@ export function CheckerDashboard() {
       className="space-y-6"
       data-ocid="checker_dashboard.page"
     >
+      {/* Quick Actions */}
+      <div className="flex flex-wrap gap-3">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => navigate("/checker/stats")}
+          className="gap-2"
+          data-ocid="checker_dashboard.view_stats.button"
+        >
+          <BarChart2 className="w-4 h-4" />
+          View Stats
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => navigate("/checker/approved")}
+          className="gap-2"
+          data-ocid="checker_dashboard.view_approved.button"
+        >
+          <ClipboardCheck className="w-4 h-4" />
+          View Approved
+        </Button>
+      </div>
+
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4">
         {[
@@ -51,9 +88,9 @@ export function CheckerDashboard() {
             color: "text-blue-600 bg-blue-100",
           },
           {
-            label: "Checked Today",
-            labelHi: "आज जांचे",
-            value: checkedToday.length,
+            label: "Reviewed This Month",
+            labelHi: "इस माह जांचे",
+            value: checkedThisMonth.length,
             icon: <ClipboardCheck className="w-5 h-5" />,
             color: "text-green-600 bg-green-100",
           },

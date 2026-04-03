@@ -1,7 +1,17 @@
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -18,12 +28,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import {
   CheckCircle,
   ChevronDown,
   ChevronUp,
   Edit3,
+  Save,
   Shield,
+  Trash2,
   UserCheck,
   UserPlus,
   Users,
@@ -35,17 +48,30 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { useNavigation } from "../../App";
 import { useBankStore } from "../../store/useBankStore";
+import { useDepartmentStore } from "../../store/useDepartmentStore";
 import { useFacultyStore } from "../../store/useFacultyStore";
 import type { FacultyProfile } from "../../types/models";
 
 export function FacultyManagement() {
   const { navigate } = useNavigation();
-  const { faculty, updateFaculty, setEarningLimits } = useFacultyStore();
+  const { faculty, updateFaculty, deleteFaculty, setEarningLimits } =
+    useFacultyStore();
   const { getBankDetailsByFaculty } = useBankStore();
+  const { departments } = useDepartmentStore();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [limitsDialog, setLimitsDialog] = useState<FacultyProfile | null>(null);
   const [monthlyLimit, setMonthlyLimit] = useState("");
   const [yearlyLimit, setYearlyLimit] = useState("");
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  // Edit profile dialog state
+  const [editDialog, setEditDialog] = useState<FacultyProfile | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editDeptId, setEditDeptId] = useState("");
+  const [editDesignation, setEditDesignation] = useState("");
+  const [editQualifications, setEditQualifications] = useState("");
 
   const teachers = faculty.filter((f) => f.role !== "admin");
 
@@ -73,6 +99,47 @@ export function FacultyManagement() {
     setLimitsDialog(null);
     toast.success("सीमा अपडेट / Limits updated");
   };
+
+  const handleDelete = (id: string) => {
+    if (id === "demo-admin") return;
+    deleteFaculty(id);
+    setExpandedId(null);
+    setDeleteId(null);
+    toast.success("शिक्षक हटाया / Faculty deleted");
+  };
+
+  const openEditDialog = (member: FacultyProfile) => {
+    setEditDialog(member);
+    setEditName(member.name);
+    setEditEmail(member.email);
+    setEditPhone(member.phone);
+    const matchedDept = departments.find((d) => d.name === member.department);
+    setEditDeptId(matchedDept?.id ?? "");
+    setEditDesignation(member.designation ?? "");
+    setEditQualifications(member.qualifications);
+  };
+
+  const handleSaveEdit = () => {
+    if (!editDialog) return;
+    if (!editName.trim() || !editEmail.trim()) {
+      toast.error("Name and email are required");
+      return;
+    }
+    const dept = departments.find((d) => d.id === editDeptId);
+    updateFaculty(editDialog.id, {
+      name: editName.trim(),
+      email: editEmail.trim(),
+      phone: editPhone.trim(),
+      department: dept?.name ?? editDialog.department,
+      designation: editDesignation || undefined,
+      qualifications: editQualifications.trim(),
+    });
+    setEditDialog(null);
+    toast.success("प्रोफाइल अपडेट / Profile updated");
+  };
+
+  const selectedDeptDesignations =
+    departments.find((d) => d.id === editDeptId)?.designations ?? [];
 
   const initials = (name: string) =>
     name
@@ -178,7 +245,7 @@ export function FacultyManagement() {
                           e.stopPropagation();
                           handleReject(member.id);
                         }}
-                        data-ocid={`faculty_management.delete_button.${idx + 1}`}
+                        data-ocid={`faculty_management.reject_button.${idx + 1}`}
                       >
                         <XCircle className="w-3 h-3 mr-1" /> Reject
                       </Button>
@@ -273,7 +340,7 @@ export function FacultyManagement() {
                         setMonthlyLimit(member.monthlyLimit?.toString() ?? "");
                         setYearlyLimit(member.yearlyLimit?.toString() ?? "");
                       }}
-                      data-ocid={`faculty_management.edit_button.${idx + 1}`}
+                      data-ocid={`faculty_management.limits_button.${idx + 1}`}
                     >
                       <Wallet className="w-3 h-3 mr-1" /> Set Earning Limits
                     </Button>
@@ -297,9 +364,26 @@ export function FacultyManagement() {
                         <UserCheck className="w-3 h-3 mr-1" /> Approved
                       </Badge>
                     )}
-                    <Button size="sm" variant="outline" className="h-7 text-xs">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      onClick={() => openEditDialog(member)}
+                      data-ocid={`faculty_management.edit_button.${idx + 1}`}
+                    >
                       <Edit3 className="w-3 h-3 mr-1" /> Edit Profile
                     </Button>
+                    {member.id !== "demo-admin" && (
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        className="h-7 text-xs"
+                        onClick={() => setDeleteId(member.id)}
+                        data-ocid={`faculty_management.delete_button.${idx + 1}`}
+                      >
+                        <Trash2 className="w-3 h-3 mr-1" /> Delete
+                      </Button>
+                    )}
                   </div>
                 </div>
               )}
@@ -364,6 +448,148 @@ export function FacultyManagement() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Edit Profile dialog */}
+      <Dialog open={!!editDialog} onOpenChange={() => setEditDialog(null)}>
+        <DialogContent
+          className="max-w-lg"
+          data-ocid="faculty_edit_profile.dialog"
+        >
+          <DialogHeader>
+            <DialogTitle>प्रोफाइल संपादित करें / Edit Profile</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs">नाम / Name *</Label>
+                <Input
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="mt-1"
+                  data-ocid="faculty_edit_profile.name.input"
+                />
+              </div>
+              <div>
+                <Label className="text-xs">ईमेल / Email *</Label>
+                <Input
+                  type="email"
+                  value={editEmail}
+                  onChange={(e) => setEditEmail(e.target.value)}
+                  className="mt-1"
+                  data-ocid="faculty_edit_profile.email.input"
+                />
+              </div>
+              <div>
+                <Label className="text-xs">फोन / Phone</Label>
+                <Input
+                  type="tel"
+                  value={editPhone}
+                  onChange={(e) => setEditPhone(e.target.value)}
+                  className="mt-1"
+                  data-ocid="faculty_edit_profile.phone.input"
+                />
+              </div>
+              <div>
+                <Label className="text-xs">विभाग / Department</Label>
+                <Select
+                  value={editDeptId}
+                  onValueChange={(v) => {
+                    setEditDeptId(v);
+                    setEditDesignation("");
+                  }}
+                >
+                  <SelectTrigger
+                    className="mt-1"
+                    data-ocid="faculty_edit_profile.department.select"
+                  >
+                    <SelectValue placeholder="Select department" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {departments.map((d) => (
+                      <SelectItem key={d.id} value={d.id}>
+                        {d.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="col-span-2">
+                <Label className="text-xs">पदनाम / Designation</Label>
+                <Select
+                  value={editDesignation}
+                  onValueChange={setEditDesignation}
+                  disabled={!editDeptId}
+                >
+                  <SelectTrigger
+                    className="mt-1"
+                    data-ocid="faculty_edit_profile.designation.select"
+                  >
+                    <SelectValue placeholder="Select designation" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {selectedDeptDesignations.map((des) => (
+                      <SelectItem key={des} value={des}>
+                        {des}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div>
+              <Label className="text-xs">योग्यता / Qualifications</Label>
+              <Textarea
+                value={editQualifications}
+                onChange={(e) => setEditQualifications(e.target.value)}
+                className="mt-1 h-20 text-sm resize-none"
+                data-ocid="faculty_edit_profile.qualifications.textarea"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setEditDialog(null)}
+              data-ocid="faculty_edit_profile.cancel_button"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveEdit}
+              data-ocid="faculty_edit_profile.save_button"
+            >
+              <Save className="w-3 h-3 mr-1" /> Save / सहेजें
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
+        <AlertDialogContent data-ocid="faculty_management.delete.dialog">
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              क्या आप सुनिश्चित हैं? / Are you sure?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the faculty member. This action
+              cannot be undone. / यह शिक्षक स्थायी रूप से हट जाएगा।
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-ocid="faculty_management.delete.cancel_button">
+              Cancel / रद्द करें
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive hover:bg-destructive/90"
+              onClick={() => deleteId && handleDelete(deleteId)}
+              data-ocid="faculty_management.delete.confirm_button"
+            >
+              Delete / हटाएं
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </motion.div>
   );
 }

@@ -223,29 +223,6 @@ export function LoginPage({
                   )}
                   {isSubmitting ? "Signing in..." : "Login / लॉगिन"}
                 </Button>
-
-                <div className="text-center text-[11px] text-muted-foreground space-y-1">
-                  <p>
-                    Admin:{" "}
-                    <span className="font-mono bg-secondary px-1 rounded">
-                      admin
-                    </span>
-                    {" / "}
-                    <span className="font-mono bg-secondary px-1 rounded">
-                      admin123
-                    </span>
-                  </p>
-                  <p>
-                    Checker:{" "}
-                    <span className="font-mono bg-secondary px-1 rounded">
-                      checker
-                    </span>
-                    {" / "}
-                    <span className="font-mono bg-secondary px-1 rounded">
-                      checker123
-                    </span>
-                  </p>
-                </div>
               </form>
             </TabsContent>
 

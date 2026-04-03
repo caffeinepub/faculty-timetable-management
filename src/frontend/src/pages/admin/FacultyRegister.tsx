@@ -24,34 +24,8 @@ import { motion } from "motion/react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useNavigation } from "../../App";
+import { useDepartmentStore } from "../../store/useDepartmentStore";
 import { useFacultyStore } from "../../store/useFacultyStore";
-
-const DEPARTMENTS = [
-  "Computer Science",
-  "Information Technology",
-  "Mathematics",
-  "Physics",
-  "Chemistry",
-  "English",
-  "Hindi",
-  "Commerce",
-  "Economics",
-  "Management",
-  "Finance",
-  "Other",
-];
-
-const DESIGNATIONS = [
-  "Principal",
-  "Vice Principal",
-  "Professor",
-  "Associate Professor",
-  "Assistant Professor",
-  "Lecturer",
-  "Guest Faculty",
-  "Account Checker",
-  "Other",
-];
 
 function FieldGroup({
   label,
@@ -70,12 +44,13 @@ function FieldGroup({
 export function FacultyRegister() {
   const { navigate } = useNavigation();
   const { addFaculty } = useFacultyStore();
+  const { departments } = useDepartmentStore();
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [role, setRole] = useState<"teacher" | "checker">("teacher");
-  const [department, setDepartment] = useState("");
+  const [selectedDeptId, setSelectedDeptId] = useState("");
   const [designation, setDesignation] = useState("");
   const [qualifications, setQualifications] = useState("");
   const [monthlyLimit, setMonthlyLimit] = useState("");
@@ -83,12 +58,28 @@ export function FacultyRegister() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [registered, setRegistered] = useState<string | null>(null);
 
+  const selectedDept = departments.find((d) => d.id === selectedDeptId) ?? null;
+  const designationOptions = selectedDept?.designations ?? [
+    "Professor",
+    "Associate Professor",
+    "Assistant Professor",
+    "Lecturer",
+    "Guest Faculty",
+    "Account Checker",
+    "Other",
+  ];
+
+  const handleDeptChange = (deptId: string) => {
+    setSelectedDeptId(deptId);
+    setDesignation(""); // reset designation when dept changes
+  };
+
   const handleReset = () => {
     setName("");
     setEmail("");
     setPhone("");
     setRole("teacher");
-    setDepartment("");
+    setSelectedDeptId("");
     setDesignation("");
     setQualifications("");
     setMonthlyLimit("");
@@ -118,13 +109,14 @@ export function FacultyRegister() {
 
     setIsSubmitting(true);
     setTimeout(() => {
+      const deptName = selectedDept?.name ?? undefined;
       const profile = addFaculty({
         name: name.trim(),
         email: email.trim(),
         phone: phone.trim(),
         role,
         qualifications: qualifications.trim(),
-        department: department || undefined,
+        department: deptName,
         designation: designation || undefined,
         monthlyLimit: monthlyLimit ? Number(monthlyLimit) : undefined,
         yearlyLimit: yearlyLimit ? Number(yearlyLimit) : undefined,
@@ -296,8 +288,8 @@ export function FacultyRegister() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <FieldGroup label="Department / विभाग">
                 <Select
-                  value={department}
-                  onValueChange={setDepartment}
+                  value={selectedDeptId}
+                  onValueChange={handleDeptChange}
                   disabled={isSubmitting}
                 >
                   <SelectTrigger
@@ -307,9 +299,9 @@ export function FacultyRegister() {
                     <SelectValue placeholder="Select department" />
                   </SelectTrigger>
                   <SelectContent>
-                    {DEPARTMENTS.map((d) => (
-                      <SelectItem key={d} value={d}>
-                        {d}
+                    {departments.map((d) => (
+                      <SelectItem key={d.id} value={d.id}>
+                        {d.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -328,7 +320,7 @@ export function FacultyRegister() {
                     <SelectValue placeholder="Select designation" />
                   </SelectTrigger>
                   <SelectContent>
-                    {DESIGNATIONS.map((d) => (
+                    {designationOptions.map((d) => (
                       <SelectItem key={d} value={d}>
                         {d}
                       </SelectItem>

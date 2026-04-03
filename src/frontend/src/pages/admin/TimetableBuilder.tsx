@@ -1,3 +1,13 @@
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -65,6 +75,8 @@ export function TimetableBuilder() {
   const [addResourceOpen, setAddResourceOpen] = useState(false);
   const [resourceTab, setResourceTab] = useState("semester");
   const [clashMsg, setClashMsg] = useState<string | null>(null);
+  const [deleteEntryId, setDeleteEntryId] = useState<string | null>(null);
+  const [deleteEntryName, setDeleteEntryName] = useState("");
 
   // Entry form state
   const [entryForm, setEntryForm] = useState({
@@ -279,14 +291,11 @@ export function TimetableBuilder() {
             <TimetableGrid
               entries={entries}
               onEntryClick={(e) => {
-                if (
-                  window.confirm(
-                    `Remove entry for ${subjects.find((s) => s.id === e.subjectId)?.name}?`,
-                  )
-                ) {
-                  removeEntry(e.id);
-                  toast.success("प्रविष्टि हटाई / Entry removed");
-                }
+                setDeleteEntryId(e.id);
+                setDeleteEntryName(
+                  subjects.find((s) => s.id === e.subjectId)?.name ??
+                    "this entry",
+                );
               }}
             />
           </div>
@@ -674,6 +683,42 @@ export function TimetableBuilder() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Entry Confirmation */}
+      <AlertDialog
+        open={!!deleteEntryId}
+        onOpenChange={() => setDeleteEntryId(null)}
+      >
+        <AlertDialogContent data-ocid="timetable.delete.dialog">
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              क्या आप सुनिश्चित हैं? / Are you sure?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Remove timetable entry for "{deleteEntryName}"? / "
+              {deleteEntryName}" के लिए प्रविष्टि हटाएं?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-ocid="timetable.delete.cancel_button">
+              Cancel / रद्द करें
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive hover:bg-destructive/90"
+              onClick={() => {
+                if (deleteEntryId) {
+                  removeEntry(deleteEntryId);
+                  setDeleteEntryId(null);
+                  toast.success("प्रविष्टि हटाई / Entry removed");
+                }
+              }}
+              data-ocid="timetable.delete.confirm_button"
+            >
+              Delete / हटाएं
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </motion.div>
   );
 }

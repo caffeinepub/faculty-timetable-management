@@ -24,14 +24,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { AlertTriangle, FileText, Plus, Send, Trash2 } from "lucide-react";
+import { FileText, Plus, Send, Trash2 } from "lucide-react";
 import { motion } from "motion/react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { BillStatusBadge } from "../../components/BillStatusBadge";
 import {
   RATE_PER_HOUR,
-  TDS_THRESHOLD,
+  calcNet,
+  calcTds,
   useBillingStore,
 } from "../../store/useBillingStore";
 import { useTimetableStore } from "../../store/useTimetableStore";
@@ -63,7 +64,6 @@ export function BillSubmission({ profile }: BillSubmissionProps) {
     today.getFullYear(),
     today.getMonth() + 1,
   );
-  const tdsApplied = monthlyEarnings.gross > TDS_THRESHOLD;
 
   const handleAddBill = () => {
     if (!date || !subjectId || !batchId || !hours) {
@@ -104,6 +104,10 @@ export function BillSubmission({ profile }: BillSubmissionProps) {
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   );
 
+  const previewGross = Number(hours) * RATE_PER_HOUR;
+  const previewTds = calcTds(previewGross);
+  const previewNet = calcNet(previewGross);
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -115,7 +119,7 @@ export function BillSubmission({ profile }: BillSubmissionProps) {
         <div>
           <h2 className="text-lg font-bold">बिल जमा करें / Bill Submission</h2>
           <p className="text-xs text-muted-foreground">
-            Rate: ₹{RATE_PER_HOUR}/hour
+            Rate: ₹{RATE_PER_HOUR}/hour &bull; TDS: 10% on every bill
           </p>
         </div>
         <Button
@@ -137,11 +141,9 @@ export function BillSubmission({ profile }: BillSubmissionProps) {
             color: "text-green-600",
           },
           {
-            label: "TDS Deducted",
+            label: "TDS Deducted (10%)",
             labelHi: "टीडीएस",
-            value: tdsApplied
-              ? `₹${monthlyEarnings.tds.toLocaleString("en-IN")}`
-              : "Nil",
+            value: `₹${monthlyEarnings.tds.toLocaleString("en-IN")}`,
             color: "text-destructive",
           },
           {
@@ -167,15 +169,11 @@ export function BillSubmission({ profile }: BillSubmissionProps) {
         ))}
       </div>
 
-      {tdsApplied && (
-        <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg p-3">
-          <AlertTriangle className="w-4 h-4 text-red-500" />
-          <p className="text-xs text-red-700">
-            टीडीएस 10% लागू (मासिक आय ₹45,000 से अधिक) / TDS 10% applied (monthly
-            income exceeds ₹45,000)
-          </p>
-        </div>
-      )}
+      <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg p-3">
+        <span className="text-xs text-blue-700 font-medium">
+          📋 TDS नियम: प्रत्येक बिल पर 10% TDS कटेगा | Net = Gross − 10% TDS
+        </span>
+      </div>
 
       {/* Bills table */}
       <Card className="border-border shadow-card">
@@ -191,7 +189,9 @@ export function BillSubmission({ profile }: BillSubmissionProps) {
                 <TableHead>Date</TableHead>
                 <TableHead>Subject</TableHead>
                 <TableHead>Hours</TableHead>
-                <TableHead>Amount</TableHead>
+                <TableHead>Gross (₹)</TableHead>
+                <TableHead>TDS 10% (₹)</TableHead>
+                <TableHead>Net (₹)</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
@@ -199,6 +199,8 @@ export function BillSubmission({ profile }: BillSubmissionProps) {
             <TableBody>
               {sortedBills.map((bill, i) => {
                 const subject = subjects.find((s) => s.id === bill.subjectId);
+                const tds = calcTds(bill.totalAmount);
+                const net = calcNet(bill.totalAmount);
                 return (
                   <TableRow
                     key={bill.id}
@@ -213,8 +215,14 @@ export function BillSubmission({ profile }: BillSubmissionProps) {
                     <TableCell className="text-sm">
                       {bill.hoursTaught}h
                     </TableCell>
-                    <TableCell className="text-sm font-semibold">
+                    <TableCell className="text-sm font-semibold text-green-700">
                       ₹{bill.totalAmount.toLocaleString("en-IN")}
+                    </TableCell>
+                    <TableCell className="text-sm text-destructive">
+                      ₹{tds.toLocaleString("en-IN")}
+                    </TableCell>
+                    <TableCell className="text-sm font-bold">
+                      ₹{net.toLocaleString("en-IN")}
                     </TableCell>
                     <TableCell>
                       <BillStatusBadge status={bill.status} />
@@ -258,7 +266,7 @@ export function BillSubmission({ profile }: BillSubmissionProps) {
               {sortedBills.length === 0 && (
                 <TableRow>
                   <TableCell
-                    colSpan={6}
+                    colSpan={8}
                     className="text-center text-muted-foreground text-sm py-8"
                     data-ocid="bill_submission.empty_state"
                   >
@@ -335,14 +343,24 @@ export function BillSubmission({ profile }: BillSubmissionProps) {
                 data-ocid="bill_add.hours.input"
               />
             </div>
-            <div className="bg-secondary rounded-lg p-3 text-sm">
-              <span className="text-muted-foreground">Total:</span>{" "}
-              <strong>
-                ₹{(Number(hours) * RATE_PER_HOUR).toLocaleString("en-IN")}
-              </strong>
-              <span className="text-muted-foreground text-xs ml-2">
-                ({hours}h × ₹{RATE_PER_HOUR})
-              </span>
+            {/* TDS Breakdown Preview */}
+            <div className="bg-secondary rounded-lg p-3 space-y-1 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Gross Amount:</span>
+                <strong className="text-green-700">
+                  ₹{previewGross.toLocaleString("en-IN")}
+                </strong>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">TDS @ 10%:</span>
+                <span className="text-destructive">
+                  − ₹{previewTds.toLocaleString("en-IN")}
+                </span>
+              </div>
+              <div className="flex justify-between border-t pt-1 mt-1">
+                <span className="font-semibold">Net Payable:</span>
+                <strong>₹{previewNet.toLocaleString("en-IN")}</strong>
+              </div>
             </div>
           </div>
           <DialogFooter>

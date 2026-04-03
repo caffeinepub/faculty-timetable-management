@@ -117,6 +117,12 @@ export function useFacultyStore() {
     );
   };
 
+  const deleteFaculty = (id: string) => {
+    // Never delete the demo admin
+    if (id === "demo-admin") return;
+    setFaculty((prev) => prev.filter((f) => f.id !== id));
+  };
+
   const upsertFacultyById = (id: string, profile: Partial<FacultyProfile>) => {
     setFaculty((prev) => {
       const existing = prev.find((f) => f.id === id);
@@ -154,6 +160,7 @@ export function useFacultyStore() {
     getPendingFaculty,
     addFaculty,
     updateFaculty,
+    deleteFaculty,
     upsertFacultyById,
     setEarningLimits,
   };

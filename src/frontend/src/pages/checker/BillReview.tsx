@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -21,7 +21,7 @@ import { motion } from "motion/react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { BillStatusBadge } from "../../components/BillStatusBadge";
-import { useBillingStore } from "../../store/useBillingStore";
+import { calcNet, calcTds, useBillingStore } from "../../store/useBillingStore";
 import { useFacultyStore } from "../../store/useFacultyStore";
 import { useTimetableStore } from "../../store/useTimetableStore";
 import type { DailyClassBill, FacultyProfile } from "../../types/models";
@@ -82,7 +82,8 @@ export function BillReview({ profile }: BillReviewProps) {
         <div>
           <h2 className="text-lg font-bold">बिल समीक्षा / Bill Review</h2>
           <p className="text-xs text-muted-foreground">
-            {submittedBills.length} bills awaiting verification
+            {submittedBills.length} bills awaiting verification &bull; TDS 10%
+            applied on every bill
           </p>
         </div>
       </div>
@@ -92,6 +93,8 @@ export function BillReview({ profile }: BillReviewProps) {
           const teacher = getFacultyById(bill.teacherId);
           const subject = subjects.find((s) => s.id === bill.subjectId);
           const batch = batches.find((b) => b.id === bill.batchId);
+          const tds = calcTds(bill.totalAmount);
+          const net = calcNet(bill.totalAmount);
           return (
             <Card
               key={bill.id}
@@ -123,10 +126,23 @@ export function BillReview({ profile }: BillReviewProps) {
                         {subject.code} - {subject.name} &bull; {batch?.name}
                       </p>
                     )}
+                    {/* TDS breakdown inline */}
+                    <div className="flex items-center gap-3 text-xs pt-1">
+                      <span className="text-green-700 font-medium">
+                        Gross: ₹{bill.totalAmount.toLocaleString("en-IN")}
+                      </span>
+                      <span className="text-destructive">
+                        TDS: −₹{tds.toLocaleString("en-IN")}
+                      </span>
+                      <span className="font-bold">
+                        Net: ₹{net.toLocaleString("en-IN")}
+                      </span>
+                    </div>
                   </div>
                   <div className="text-right">
+                    <p className="text-xs text-muted-foreground">Net</p>
                     <p className="text-lg font-bold">
-                      ₹{bill.totalAmount.toLocaleString("en-IN")}
+                      ₹{net.toLocaleString("en-IN")}
                     </p>
                     <Button
                       size="sm"
@@ -166,48 +182,73 @@ export function BillReview({ profile }: BillReviewProps) {
           <DialogHeader>
             <DialogTitle>बिल सत्यापन / Bill Verification</DialogTitle>
           </DialogHeader>
-          {selectedBill && (
-            <div className="space-y-4">
-              {/* Bill details */}
-              <div className="bg-secondary rounded-lg p-4 space-y-2 text-sm">
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div>
-                    <span className="text-muted-foreground">शिक्षक:</span>{" "}
-                    {getFacultyById(selectedBill.teacherId)?.name}
+          {selectedBill &&
+            (() => {
+              const tds = calcTds(selectedBill.totalAmount);
+              const net = calcNet(selectedBill.totalAmount);
+              return (
+                <div className="space-y-4">
+                  <div className="bg-secondary rounded-lg p-4 space-y-2 text-sm">
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <span className="text-muted-foreground">शिक्षक:</span>{" "}
+                        {getFacultyById(selectedBill.teacherId)?.name}
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">तारीख:</span>{" "}
+                        {new Date(selectedBill.date).toLocaleDateString(
+                          "en-IN",
+                        )}
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">घंटे:</span>{" "}
+                        {selectedBill.hoursTaught}h
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">दर:</span> ₹
+                        {selectedBill.ratePerHour}/hr
+                      </div>
+                    </div>
+                    {/* TDS Breakdown */}
+                    <div className="border-t pt-2 space-y-1 text-xs">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">
+                          Gross Amount / सकल राशि:
+                        </span>
+                        <span className="font-semibold text-green-700">
+                          ₹{selectedBill.totalAmount.toLocaleString("en-IN")}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">
+                          TDS @ 10% / टीडीएस:
+                        </span>
+                        <span className="text-destructive">
+                          − ₹{tds.toLocaleString("en-IN")}
+                        </span>
+                      </div>
+                      <div className="flex justify-between border-t pt-1 font-bold text-sm">
+                        <span>Net Payable / नेट देय:</span>
+                        <span>₹{net.toLocaleString("en-IN")}</span>
+                      </div>
+                    </div>
                   </div>
+
                   <div>
-                    <span className="text-muted-foreground">तारीख:</span>{" "}
-                    {new Date(selectedBill.date).toLocaleDateString("en-IN")}
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">घंटे:</span>{" "}
-                    {selectedBill.hoursTaught}h
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">दर:</span> ₹
-                    {selectedBill.ratePerHour}/hr
-                  </div>
-                  <div className="col-span-2 text-base font-bold">
-                    कुल / Total: ₹
-                    {selectedBill.totalAmount.toLocaleString("en-IN")}
+                    <Label className="text-xs">
+                      टिप्पणी / Comment (required for rejection)
+                    </Label>
+                    <Textarea
+                      value={comment}
+                      onChange={(e) => setComment(e.target.value)}
+                      placeholder="Add your verification comment..."
+                      className="mt-1 h-24 text-sm"
+                      data-ocid="bill_review.comment.textarea"
+                    />
                   </div>
                 </div>
-              </div>
-
-              <div>
-                <Label className="text-xs">
-                  टिप्पणी / Comment (required for rejection)
-                </Label>
-                <Textarea
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                  placeholder="Add your verification comment..."
-                  className="mt-1 h-24 text-sm"
-                  data-ocid="bill_review.comment.textarea"
-                />
-              </div>
-            </div>
-          )}
+              );
+            })()}
           <DialogFooter className="gap-2">
             <Button
               variant="outline"

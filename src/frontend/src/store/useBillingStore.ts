@@ -2,8 +2,7 @@ import { useLocalStorage } from "../hooks/useLocalStorage";
 import type { BillStatus, DailyClassBill, RtgsPayment } from "../types/models";
 
 export const RATE_PER_HOUR = 800;
-export const TDS_THRESHOLD = 45000;
-export const TDS_RATE = 0.1;
+export const TDS_RATE = 0.1; // 10% TDS always applied
 
 const today = new Date();
 const fmt = (d: Date) => d.toISOString().split("T")[0];
@@ -88,6 +87,15 @@ const SAMPLE_BILLS: DailyClassBill[] = [
   },
 ];
 
+/** Always apply 10% TDS on gross amount */
+export function calcTds(gross: number) {
+  return Math.round(gross * TDS_RATE);
+}
+
+export function calcNet(gross: number) {
+  return gross - calcTds(gross);
+}
+
 export function useBillingStore() {
   const [bills, setBills] = useLocalStorage<DailyClassBill[]>(
     "ftms_bills",
@@ -162,11 +170,11 @@ export function useBillingStore() {
   ) => {
     const filtered = bills.filter((b) => {
       if (b.teacherId !== teacherId || b.status !== "Approved") return false;
-      const d = new Date(b.date);
-      return d.getFullYear() === year && d.getMonth() + 1 === month;
+      const dt = new Date(b.date);
+      return dt.getFullYear() === year && dt.getMonth() + 1 === month;
     });
     const gross = filtered.reduce((s, b) => s + b.totalAmount, 0);
-    const tds = gross > TDS_THRESHOLD ? gross * TDS_RATE : 0;
+    const tds = calcTds(gross); // Always 10%
     return { gross, tds, net: gross - tds, bills: filtered };
   };
 

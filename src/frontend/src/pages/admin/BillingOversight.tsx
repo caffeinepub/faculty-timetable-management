@@ -1,3 +1,13 @@
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,6 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -29,7 +40,9 @@ import {
   CheckCircle,
   DollarSign,
   Download,
+  Edit2,
   FileText,
+  Trash2,
   TrendingUp,
   XCircle,
 } from "lucide-react";
@@ -37,16 +50,18 @@ import { motion } from "motion/react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { BillStatusBadge } from "../../components/BillStatusBadge";
+import { exportToExcel } from "../../lib/xlsxUtils";
 import {
   TDS_RATE,
-  TDS_THRESHOLD,
+  calcNet,
+  calcTds,
   useBillingStore,
 } from "../../store/useBillingStore";
 import { useFacultyStore } from "../../store/useFacultyStore";
 import type { DailyClassBill } from "../../types/models";
 
 export function BillingOversight() {
-  const { bills, updateBillStatus } = useBillingStore();
+  const { bills, updateBillStatus, updateBill, deleteBill } = useBillingStore();
   const { getFacultyById } = useFacultyStore();
   const [selectedBill, setSelectedBill] = useState<DailyClassBill | null>(null);
   const [adminComment, setAdminComment] = useState("");
@@ -57,6 +72,15 @@ export function BillingOversight() {
     (new Date().getMonth() + 1).toString(),
   );
   const [activeTab, setActiveTab] = useState<"pending" | "report">("pending");
+
+  const [editBill, setEditBill] = useState<DailyClassBill | null>(null);
+  const [editForm, setEditForm] = useState({
+    date: "",
+    hoursTaught: "",
+    ratePerHour: "",
+    adminComment: "",
+  });
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const checkedBills = bills.filter((b) => b.status === "Checked");
 
@@ -83,7 +107,7 @@ export function BillingOversight() {
 
     return Object.entries(byTeacher).map(([teacherId, data]) => {
       const teacher = getFacultyById(teacherId);
-      const tds = data.gross > TDS_THRESHOLD ? data.gross * TDS_RATE : 0;
+      const tds = Math.round(data.gross * TDS_RATE);
       return {
         teacherId,
         teacherName: teacher?.name ?? "Unknown",
@@ -109,12 +133,74 @@ export function BillingOversight() {
     toast.success("बिल स्वीकृत / Bill approved");
   };
 
-  const handleReject = () => {
+  const handleRejectBill = () => {
     if (!selectedBill) return;
     updateBillStatus(selectedBill.id, "Rejected", { adminComment });
     setSelectedBill(null);
     setAdminComment("");
     toast.error("बिल अस्वीकृत / Bill rejected");
+  };
+
+  const openEditBill = (bill: DailyClassBill) => {
+    setEditBill(bill);
+    setEditForm({
+      date: bill.date,
+      hoursTaught: String(bill.hoursTaught),
+      ratePerHour: String(bill.ratePerHour),
+      adminComment: bill.adminComment ?? "",
+    });
+  };
+
+  const handleSaveEditBill = () => {
+    if (!editBill) return;
+    const hours = Number(editForm.hoursTaught);
+    const rate = Number(editForm.ratePerHour);
+    if (Number.isNaN(hours) || Number.isNaN(rate) || hours <= 0) {
+      toast.error("Invalid hours or rate");
+      return;
+    }
+    const totalAmount = hours * rate;
+    updateBill(editBill.id, {
+      date: editForm.date,
+      hoursTaught: hours,
+      ratePerHour: rate,
+      totalAmount,
+      adminComment: editForm.adminComment || undefined,
+    });
+    setEditBill(null);
+    toast.success("बिल अपडेट / Bill updated");
+  };
+
+  const handleDelete = (id: string) => {
+    const bill = bills.find((b) => b.id === id);
+    if (bill && (bill.status === "Approved" || bill.status === "Checked")) {
+      toast.error(
+        "Cannot delete approved/checked bills / अनुमोदित बिल हटाए नहीं जा सकते",
+      );
+      setDeleteId(null);
+      return;
+    }
+    deleteBill(id);
+    setDeleteId(null);
+    toast.success("बिल हटाया / Bill deleted");
+  };
+
+  const exportExcel = () => {
+    const data = monthlyReport.map((row) => ({
+      Faculty: row.teacherName,
+      "Hours Taught": row.hours,
+      Bills: row.bills,
+      "Gross (₹)": row.gross,
+      "TDS 10% (₹)": row.tds,
+      "Net (₹)": row.net,
+    }));
+    exportToExcel(
+      data,
+      "Billing Report",
+      `billing_report_${reportYear}_${reportMonth}.xlsx`,
+    )
+      .then(() => toast.success("Excel exported"))
+      .catch(() => toast.error("Export failed"));
   };
 
   const months = [
@@ -145,7 +231,8 @@ export function BillingOversight() {
             बिलिंग निगरानी / Billing Oversight
           </h2>
           <p className="text-xs text-muted-foreground">
-            {checkedBills.length} bills awaiting approval
+            {checkedBills.length} bills awaiting approval &bull; TDS 10%
+            deducted on every bill
           </p>
         </div>
         <div className="flex gap-2">
@@ -184,14 +271,18 @@ export function BillingOversight() {
                   <TableHead>Faculty</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead>Hours</TableHead>
-                  <TableHead>Amount</TableHead>
+                  <TableHead>Gross (₹)</TableHead>
+                  <TableHead>TDS 10% (₹)</TableHead>
+                  <TableHead>Net (₹)</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Action</TableHead>
+                  <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {checkedBills.map((bill, i) => {
                   const teacher = getFacultyById(bill.teacherId);
+                  const tds = calcTds(bill.totalAmount);
+                  const net = calcNet(bill.totalAmount);
                   return (
                     <TableRow key={bill.id} data-ocid={`billing.row.${i + 1}`}>
                       <TableCell className="text-sm font-medium">
@@ -203,25 +294,42 @@ export function BillingOversight() {
                       <TableCell className="text-sm">
                         {bill.hoursTaught}h
                       </TableCell>
-                      <TableCell className="text-sm font-semibold">
+                      <TableCell className="text-sm font-semibold text-green-700">
                         ₹{bill.totalAmount.toLocaleString("en-IN")}
+                      </TableCell>
+                      <TableCell className="text-sm text-destructive">
+                        ₹{tds.toLocaleString("en-IN")}
+                      </TableCell>
+                      <TableCell className="text-sm font-bold">
+                        ₹{net.toLocaleString("en-IN")}
                       </TableCell>
                       <TableCell>
                         <BillStatusBadge status={bill.status} />
                       </TableCell>
                       <TableCell>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 text-xs"
-                          onClick={() => {
-                            setSelectedBill(bill);
-                            setAdminComment("");
-                          }}
-                          data-ocid={`billing.edit_button.${i + 1}`}
-                        >
-                          Review
-                        </Button>
+                        <div className="flex gap-1">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs"
+                            onClick={() => {
+                              setSelectedBill(bill);
+                              setAdminComment("");
+                            }}
+                            data-ocid={`billing.review_button.${i + 1}`}
+                          >
+                            Review
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 w-7 p-0"
+                            onClick={() => openEditBill(bill)}
+                            data-ocid={`billing.edit_button.${i + 1}`}
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   );
@@ -229,7 +337,7 @@ export function BillingOversight() {
                 {checkedBills.length === 0 && (
                   <TableRow>
                     <TableCell
-                      colSpan={6}
+                      colSpan={8}
                       className="text-center text-muted-foreground text-sm py-8"
                       data-ocid="billing.empty_state"
                     >
@@ -293,9 +401,10 @@ export function BillingOversight() {
                   size="sm"
                   variant="outline"
                   className="h-8 text-xs ml-auto"
+                  onClick={exportExcel}
                   data-ocid="billing.download.button"
                 >
-                  <Download className="w-3 h-3 mr-1" /> Export
+                  <Download className="w-3 h-3 mr-1" /> Export Excel
                 </Button>
               </div>
             </CardContent>
@@ -312,7 +421,7 @@ export function BillingOversight() {
                 color: "text-green-600 bg-green-100",
               },
               {
-                label: "TDS Deducted",
+                label: "TDS Deducted (10%)",
                 labelHi: "टीडीएस",
                 value: `₹${totalTds.toLocaleString("en-IN")}`,
                 icon: <FileText className="w-4 h-4" />,
@@ -360,9 +469,8 @@ export function BillingOversight() {
                     <TableHead>Hours</TableHead>
                     <TableHead>Bills</TableHead>
                     <TableHead>Gross (₹)</TableHead>
-                    <TableHead>TDS (₹)</TableHead>
+                    <TableHead>TDS 10% (₹)</TableHead>
                     <TableHead>Net (₹)</TableHead>
-                    <TableHead>TDS?</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -376,32 +484,24 @@ export function BillingOversight() {
                       </TableCell>
                       <TableCell className="text-sm">{row.hours}h</TableCell>
                       <TableCell className="text-sm">{row.bills}</TableCell>
-                      <TableCell className="text-sm">
+                      <TableCell className="text-sm text-green-700 font-semibold">
                         {row.gross.toLocaleString("en-IN")}
                       </TableCell>
                       <TableCell className="text-sm text-destructive">
                         {row.tds.toLocaleString("en-IN")}
+                        <Badge className="ml-1 bg-red-100 text-red-700 border-red-200 text-[10px]">
+                          10%
+                        </Badge>
                       </TableCell>
-                      <TableCell className="text-sm font-semibold">
+                      <TableCell className="text-sm font-bold">
                         {row.net.toLocaleString("en-IN")}
-                      </TableCell>
-                      <TableCell>
-                        {row.tds > 0 ? (
-                          <Badge className="bg-red-100 text-red-700 border-red-200 text-[10px]">
-                            10%
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline" className="text-[10px]">
-                            Nil
-                          </Badge>
-                        )}
                       </TableCell>
                     </TableRow>
                   ))}
                   {monthlyReport.length === 0 && (
                     <TableRow>
                       <TableCell
-                        colSpan={7}
+                        colSpan={6}
                         className="text-center text-muted-foreground text-sm py-8"
                         data-ocid="billing_report.empty_state"
                       >
@@ -422,46 +522,79 @@ export function BillingOversight() {
           <DialogHeader>
             <DialogTitle>बिल समीक्षा / Bill Review</DialogTitle>
           </DialogHeader>
-          {selectedBill && (
-            <div className="space-y-3">
-              <div className="bg-secondary rounded-lg p-3 grid grid-cols-2 gap-2 text-xs">
-                <div>
-                  <span className="text-muted-foreground">Teacher:</span>{" "}
-                  {getFacultyById(selectedBill.teacherId)?.name}
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Date:</span>{" "}
-                  {new Date(selectedBill.date).toLocaleDateString("en-IN")}
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Hours:</span>{" "}
-                  {selectedBill.hoursTaught}h
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Amount:</span>{" "}
-                  <strong>
-                    ₹{selectedBill.totalAmount.toLocaleString("en-IN")}
-                  </strong>
-                </div>
-                {selectedBill.checkerComment && (
-                  <div className="col-span-2">
-                    <span className="text-muted-foreground">Checker Note:</span>{" "}
-                    {selectedBill.checkerComment}
+          {selectedBill &&
+            (() => {
+              const tds = calcTds(selectedBill.totalAmount);
+              const net = calcNet(selectedBill.totalAmount);
+              return (
+                <div className="space-y-3">
+                  <div className="bg-secondary rounded-lg p-3 space-y-2 text-xs">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <span className="text-muted-foreground">Teacher:</span>{" "}
+                        {getFacultyById(selectedBill.teacherId)?.name}
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Date:</span>{" "}
+                        {new Date(selectedBill.date).toLocaleDateString(
+                          "en-IN",
+                        )}
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Hours:</span>{" "}
+                        {selectedBill.hoursTaught}h
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Rate:</span> ₹
+                        {selectedBill.ratePerHour}/hr
+                      </div>
+                    </div>
+                    <div className="border-t pt-2 space-y-1">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">
+                          Gross / सकल:
+                        </span>
+                        <span className="font-semibold text-green-700">
+                          ₹{selectedBill.totalAmount.toLocaleString("en-IN")}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">
+                          TDS @ 10%:
+                        </span>
+                        <span className="text-destructive">
+                          − ₹{tds.toLocaleString("en-IN")}
+                        </span>
+                      </div>
+                      <div className="flex justify-between border-t pt-1 font-bold text-sm">
+                        <span>Net Payable / नेट देय:</span>
+                        <span>₹{net.toLocaleString("en-IN")}</span>
+                      </div>
+                    </div>
+                    {selectedBill.checkerComment && (
+                      <div className="border-t pt-2">
+                        <span className="text-muted-foreground">
+                          Checker Note:
+                        </span>{" "}
+                        {selectedBill.checkerComment}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-              <div>
-                <Label className="text-xs">अडमिन टिप्पणी / Admin Comment</Label>
-                <Textarea
-                  value={adminComment}
-                  onChange={(e) => setAdminComment(e.target.value)}
-                  placeholder="Optional comment..."
-                  className="mt-1 text-sm h-20"
-                  data-ocid="billing_review.textarea"
-                />
-              </div>
-            </div>
-          )}
+                  <div>
+                    <Label className="text-xs">
+                      अडमिन टिप्पणी / Admin Comment
+                    </Label>
+                    <Textarea
+                      value={adminComment}
+                      onChange={(e) => setAdminComment(e.target.value)}
+                      placeholder="Optional comment..."
+                      className="mt-1 text-sm h-20"
+                      data-ocid="billing_review.textarea"
+                    />
+                  </div>
+                </div>
+              );
+            })()}
           <DialogFooter className="gap-2">
             <Button
               variant="outline"
@@ -472,7 +605,7 @@ export function BillingOversight() {
             </Button>
             <Button
               variant="destructive"
-              onClick={handleReject}
+              onClick={handleRejectBill}
               data-ocid="billing_review.delete_button"
             >
               <XCircle className="w-4 h-4 mr-1" /> Reject
@@ -486,6 +619,113 @@ export function BillingOversight() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Edit Bill Dialog */}
+      <Dialog open={!!editBill} onOpenChange={() => setEditBill(null)}>
+        <DialogContent data-ocid="billing.edit.dialog">
+          <DialogHeader>
+            <DialogTitle>बिल संपादित करें / Edit Bill</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div>
+              <Label className="text-xs">Date / तारीख</Label>
+              <Input
+                type="date"
+                value={editForm.date}
+                onChange={(e) =>
+                  setEditForm((p) => ({ ...p, date: e.target.value }))
+                }
+                data-ocid="billing.edit.date.input"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs">Hours Taught / कक्षाएं</Label>
+                <Input
+                  type="number"
+                  value={editForm.hoursTaught}
+                  onChange={(e) =>
+                    setEditForm((p) => ({ ...p, hoursTaught: e.target.value }))
+                  }
+                  data-ocid="billing.edit.hours.input"
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Rate Per Hour / दर</Label>
+                <Input
+                  type="number"
+                  value={editForm.ratePerHour}
+                  onChange={(e) =>
+                    setEditForm((p) => ({ ...p, ratePerHour: e.target.value }))
+                  }
+                  data-ocid="billing.edit.rate.input"
+                />
+              </div>
+            </div>
+            {editForm.hoursTaught && editForm.ratePerHour && (
+              <div className="bg-secondary rounded p-2 text-xs">
+                Total: ₹
+                {(
+                  Number(editForm.hoursTaught) * Number(editForm.ratePerHour)
+                ).toLocaleString("en-IN")}
+              </div>
+            )}
+            <div>
+              <Label className="text-xs">Admin Comment</Label>
+              <Textarea
+                value={editForm.adminComment}
+                onChange={(e) =>
+                  setEditForm((p) => ({ ...p, adminComment: e.target.value }))
+                }
+                rows={2}
+                data-ocid="billing.edit.comment.textarea"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setEditBill(null)}
+              data-ocid="billing.edit.cancel_button"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveEditBill}
+              data-ocid="billing.edit.save_button"
+            >
+              Save / सहेजें
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Bill Confirmation */}
+      <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
+        <AlertDialogContent data-ocid="billing.delete.dialog">
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              क्या आप सुनिश्चित हैं? / Are you sure?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Only Draft/Rejected bills can be deleted. Approved or Checked
+              bills cannot be removed. / केवल ड्राफ्ट/अस्वीकृत बिल हटाए जा सकते हैं।
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-ocid="billing.delete.cancel_button">
+              Cancel / रद्द करें
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive hover:bg-destructive/90"
+              onClick={() => deleteId && handleDelete(deleteId)}
+              data-ocid="billing.delete.confirm_button"
+            >
+              Delete / हटाएं
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </motion.div>
   );
 }
