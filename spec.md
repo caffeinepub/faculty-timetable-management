@@ -1,42 +1,48 @@
-# Faculty Timetable Management
+# Faculty Timetable Management System
 
 ## Current State
 
-The Teacher portal has two separate billing pages:
-1. **BillSubmission** (`/teacher/bills`) — daily class bill entry using subject+batch, date, hours.
-2. **CourseClassBillingPage** (`/teacher/course-billing`) — course-wise class entry with monthly limit enforcement.
-
-Existing stores: `useBillingStore` (DailyClassBill, workflow Draft→Submitted→Checked→Approved), `useCourseClassStore`, `useCourseStore` (Course + CourseAssignment), `useDepartmentStore`, `useTimetableStore` (TimetableEntry with roomId, subjectId, teacherId).
+Version 21 deployed. Key files:
+- `LoginPage.tsx` has Tabs with Internet Identity + Username/Password tabs
+- `ExamMarksPage.tsx` uses hardcoded `CURRENT_TEACHER_ID = "teacher-1"`, no lock after submit
+- `StudentAttendancePage.tsx` uses hardcoded `CURRENT_TEACHER_ID = "teacher-1"`, has `alreadySubmitted` check but still renders editable form below it
+- `useStudentAttendanceStore.ts` has `hasSubmitted()` and `submitAttendance()`
+- `useStudentExamStore.ts` has `saveMarks()` but no `hasSubmitted()` check
+- Stores: useBillingStore, useTimetableStore, useAttendanceStore, useLeaveStore, usePerformanceStore, useStudentExamStore, useStudentStore, useCourseStore - no cascade delete helpers yet
 
 ## Requested Changes (Diff)
 
 ### Add
-- New `FacultyBillEntry.tsx` at `/teacher/bill-entry` combining both old pages
-- Cascading form: Department (only where teacher has assignments) → Course → Class → Subject → Paper Code (auto read-only) → Room No (auto from timetable lookup)
-- Date: max=today, no future dates; selecting date auto-fills Month and Year (read-only)
-- Start Time and End Time: hour-only AM/PM dropdowns (8 AM, 9 AM...6 PM). No minutes.
-- No. of Hours: auto-calculated integer (End hour - Start hour), read-only
-- Remarks: optional free-text (bilingual label: if master timetable not followed)
-- Monthly limit check before save (₹45,000 default, course-configurable). Block if exceeded.
-- TDS 10% on gross, show Gross/TDS/Net summary
-- Class usage progress bars (current month)
-- Bill table: Date, Dept, Course, Class, Subject, Paper Code, Room, Start, End, Hours, Gross, TDS, Net, Remarks, Status, Submit/Delete
-- Entries saved as DailyClassBill (status Draft) → feeds existing checker/admin approval workflow
+- `useStudentExamStore`: add `hasSubmittedMarks(teacherId, className, paperCode, examType)` function
+- `StudentAttendancePage.tsx`: when `alreadySubmitted === true`, show a read-only view of the submitted attendance with a PDF download button. Hide the editable input fields entirely.
+- `ExamMarksPage.tsx`: after submit, mark the submission as locked. Add `hasSubmittedMarks` check; when already submitted show read-only table with PDF download button. Use profile prop or credential session ID for teacherId instead of hardcoded value.
+- PDF download: use `window.print()` with a print-specific CSS class to generate PDF for both marks and attendance pages. Add a "Download PDF" button that triggers a formatted print view.
+- Cascade delete helpers in all stores (see spec v22 above)
+- Internet Identity tab removal from LoginPage
 
 ### Modify
-- `CourseAssignment` model: add `departmentId?: string`
-- `DailyClassBill` model: add `departmentId, courseId, className, subjectName, paperCode, roomNo, startTime, endTime, hoursCalculated, remarks` fields
-- `useCourseStore`: add departmentId to SAMPLE_ASSIGNMENTS; add helper `getAssignmentsByDeptAndTeacher`
-- `App.tsx`: remove `/teacher/bills` and `/teacher/course-billing` routes+sidebar; add `/teacher/bill-entry`
+- `ExamMarksPage.tsx`: 
+  - Replace `CURRENT_TEACHER_ID = "teacher-1"` with prop-based or session-based teacher ID (read from localStorage `ftms_session` for credential users)
+  - After `handleSubmit()` succeeds, set a `submitted` state to true — switch to read-only view
+  - On page load, if `hasSubmittedMarks` returns true for selected class/paper/examType, show read-only view immediately
+  - Read-only view shows same table but with plain text instead of Input fields, plus a "Download PDF" button
+- `StudentAttendancePage.tsx`:
+  - Replace `CURRENT_TEACHER_ID = "teacher-1"` with session-based ID
+  - When `alreadySubmitted === true`: do NOT render the editable table or Submit button. Instead show a read-only table of the submitted records (fetched via `getRecordsBySubmission`) plus a "Download PDF" button
+  - The "Load Students" button should also be hidden when already submitted
+- `useStudentExamStore.ts`: add `hasSubmittedMarks(teacherId, className, paperCode, examType): boolean` — checks if marks already saved for this combination
 
 ### Remove
-- Old `BillSubmission.tsx` and `CourseClassBillingPage.tsx` (unlinked from routing)
-- Sidebar nav items for old bill pages
+- Editable inputs when attendance/marks already submitted
+- Internet Identity tab from LoginPage
 
 ## Implementation Plan
 
-1. Update `CourseAssignment` and `DailyClassBill` types in `models.ts`
-2. Update `useCourseStore.ts` sample data with departmentId
-3. Update `useBillingStore.ts` to accept extended fields
-4. Create `FacultyBillEntry.tsx` with full cascading UI, time selectors, auto-calc, usage bars, bill table
-5. Update `App.tsx` routing and sidebar
+1. **LoginPage.tsx** - Remove Tabs wrapper and II tab. Render credentials form directly.
+2. **useStudentExamStore.ts** - Add `hasSubmittedMarks(teacherId, className, paperCode, examType)` function.
+3. **ExamMarksPage.tsx** - Fix teacher ID, add submit lock (read-only after submit), add PDF download.
+4. **StudentAttendancePage.tsx** - Fix teacher ID, enforce read-only when submitted, add PDF download.
+5. **Store cascade helpers** - Add to all 8 stores.
+6. **FacultyManagement.tsx** - Wire cascade delete with confirmation dialog.
+7. **CourseManagement.tsx** - Wire assignment cascade delete.
+8. **Validate** - lint fix + typecheck + build.

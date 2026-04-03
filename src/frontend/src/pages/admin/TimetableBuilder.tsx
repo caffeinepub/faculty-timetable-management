@@ -11,6 +11,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -31,8 +32,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   AlertTriangle,
   BookOpen,
+  Building2,
   Calendar,
   DoorOpen,
+  GraduationCap,
   Plus,
   Trash2,
   Users2,
@@ -41,6 +44,8 @@ import { motion } from "motion/react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { TimetableGrid } from "../../components/TimetableGrid";
+import { useCourseStore } from "../../store/useCourseStore";
+import { useDepartmentStore } from "../../store/useDepartmentStore";
 import { useFacultyStore } from "../../store/useFacultyStore";
 import { useTimetableStore } from "../../store/useTimetableStore";
 import type { DayOfWeek } from "../../types/models";
@@ -69,7 +74,10 @@ export function TimetableBuilder() {
     addBatch,
   } = useTimetableStore();
   const { getApprovedTeachers } = useFacultyStore();
+  const { departments } = useDepartmentStore();
+  const { courses, addCourse } = useCourseStore();
   const teachers = getApprovedTeachers();
+  const activeCourses = courses.filter((c) => c.isActive);
 
   const [addEntryOpen, setAddEntryOpen] = useState(false);
   const [addResourceOpen, setAddResourceOpen] = useState(false);
@@ -88,6 +96,8 @@ export function TimetableBuilder() {
     startTime: "09:00",
     endTime: "10:00",
     weekType: "all" as "odd" | "even" | "all",
+    departmentId: "",
+    courseId: "",
   });
 
   // Resource form state
@@ -105,6 +115,10 @@ export function TimetableBuilder() {
   const [batchName, setBatchName] = useState("");
   const [batchSemId, setBatchSemId] = useState("");
   const [batchStrength, setBatchStrength] = useState("60");
+  // Course resource form state
+  const [courseName, setCourseName] = useState("");
+  const [courseFullName, setCourseFullName] = useState("");
+  const [courseActive, setCourseActive] = useState(true);
 
   const handleAddEntry = () => {
     if (
@@ -113,7 +127,7 @@ export function TimetableBuilder() {
       !entryForm.roomId ||
       !entryForm.batchId
     ) {
-      toast.error("Please fill all fields");
+      toast.error("Please fill all required fields");
       return;
     }
     const result = addEntry(entryForm);
@@ -180,6 +194,22 @@ export function TimetableBuilder() {
       });
       setBatchName("");
       setBatchSemId("");
+    } else if (resourceTab === "course") {
+      if (!courseName || !courseFullName) {
+        toast.error("Fill required fields");
+        return;
+      }
+      addCourse({
+        name: courseName,
+        fullName: courseFullName,
+        duration: 3,
+        totalSemesters: 6,
+        monthlyClassLimit: 45000,
+        isActive: courseActive,
+      });
+      setCourseName("");
+      setCourseFullName("");
+      setCourseActive(true);
     }
     toast.success("संसाधन जोड़ा / Resource added");
     setAddResourceOpen(false);
@@ -225,7 +255,7 @@ export function TimetableBuilder() {
       </div>
 
       {/* Resources overview */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         {[
           {
             label: "Semesters",
@@ -239,7 +269,7 @@ export function TimetableBuilder() {
             labelHi: "विषय",
             count: subjects.length,
             icon: <BookOpen className="w-4 h-4" />,
-            color: "text-teal-DEFAULT bg-teal-mint/40",
+            color: "text-teal-600 bg-teal-100",
           },
           {
             label: "Rooms",
@@ -254,6 +284,13 @@ export function TimetableBuilder() {
             count: batches.length,
             icon: <Users2 className="w-4 h-4" />,
             color: "text-orange-600 bg-orange-100",
+          },
+          {
+            label: "Courses",
+            labelHi: "पाठ्यक्रम",
+            count: activeCourses.length,
+            icon: <GraduationCap className="w-4 h-4" />,
+            color: "text-emerald-600 bg-emerald-100",
           },
         ].map((item) => (
           <Card key={item.label} className="border-border shadow-xs">
@@ -318,6 +355,64 @@ export function TimetableBuilder() {
             </div>
           )}
           <div className="grid grid-cols-2 gap-3">
+            {/* Department — new field */}
+            <div className="col-span-2">
+              <Label className="text-xs">विभाग / Department</Label>
+              <Select
+                value={entryForm.departmentId || "none"}
+                onValueChange={(v) =>
+                  setEntryForm((p) => ({
+                    ...p,
+                    departmentId: v === "none" ? "" : v,
+                  }))
+                }
+              >
+                <SelectTrigger
+                  className="mt-1"
+                  data-ocid="timetable_entry.department.select"
+                >
+                  <SelectValue placeholder="Select department (optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">— None —</SelectItem>
+                  {departments.map((d) => (
+                    <SelectItem key={d.id} value={d.id}>
+                      {d.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Course — new field */}
+            <div className="col-span-2">
+              <Label className="text-xs">पाठ्यक्रम / Course</Label>
+              <Select
+                value={entryForm.courseId || "none"}
+                onValueChange={(v) =>
+                  setEntryForm((p) => ({
+                    ...p,
+                    courseId: v === "none" ? "" : v,
+                  }))
+                }
+              >
+                <SelectTrigger
+                  className="mt-1"
+                  data-ocid="timetable_entry.course.select"
+                >
+                  <SelectValue placeholder="Select course (optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">— None —</SelectItem>
+                  {activeCourses.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name} — {c.fullName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="col-span-2">
               <Label className="text-xs">विषय / Subject</Label>
               <Select
@@ -496,11 +591,12 @@ export function TimetableBuilder() {
             <DialogTitle>संसाधन जोड़ें / Add Resource</DialogTitle>
           </DialogHeader>
           <Tabs value={resourceTab} onValueChange={setResourceTab}>
-            <TabsList className="grid grid-cols-4 w-full">
-              <TabsTrigger value="semester">Semester</TabsTrigger>
+            <TabsList className="grid grid-cols-5 w-full">
+              <TabsTrigger value="semester">Sem</TabsTrigger>
               <TabsTrigger value="subject">Subject</TabsTrigger>
               <TabsTrigger value="room">Room</TabsTrigger>
               <TabsTrigger value="batch">Batch</TabsTrigger>
+              <TabsTrigger value="course">Course</TabsTrigger>
             </TabsList>
             <TabsContent value="semester" className="space-y-3 pt-3">
               <div>
@@ -664,6 +760,46 @@ export function TimetableBuilder() {
                   className="mt-1"
                 />
               </div>
+            </TabsContent>
+            <TabsContent value="course" className="space-y-3 pt-3">
+              <div>
+                <Label className="text-xs">
+                  पाठ्यक्रम संक्षिप्त नाम / Course Short Name *
+                </Label>
+                <Input
+                  value={courseName}
+                  onChange={(e) => setCourseName(e.target.value)}
+                  placeholder="e.g. BCA, MCA, M.Sc. IT"
+                  className="mt-1"
+                  data-ocid="timetable_resource.course.input"
+                />
+              </div>
+              <div>
+                <Label className="text-xs">पूरा नाम / Full Name *</Label>
+                <Input
+                  value={courseFullName}
+                  onChange={(e) => setCourseFullName(e.target.value)}
+                  placeholder="Bachelor of Computer Applications"
+                  className="mt-1"
+                />
+              </div>
+              <div className="flex items-center gap-2 pt-1">
+                <Checkbox
+                  id="courseActive"
+                  checked={courseActive}
+                  onCheckedChange={(v) => setCourseActive(!!v)}
+                  data-ocid="timetable_resource.course.checkbox"
+                />
+                <Label
+                  htmlFor="courseActive"
+                  className="text-xs cursor-pointer"
+                >
+                  सक्रिय / Active
+                </Label>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Monthly billing limit can be configured in Course Management.
+              </p>
             </TabsContent>
           </Tabs>
           <DialogFooter>

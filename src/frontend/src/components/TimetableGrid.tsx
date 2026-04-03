@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils";
 import { useMemo } from "react";
+import { useCourseStore } from "../store/useCourseStore";
 import { useTimetableStore } from "../store/useTimetableStore";
 import type { DayOfWeek, TimetableEntry } from "../types/models";
 
@@ -36,6 +37,7 @@ export function TimetableGrid({
   onEntryClick,
 }: TimetableGridProps) {
   const { subjects, rooms, batches } = useTimetableStore();
+  const { courses } = useCourseStore();
 
   const timeToMinutes = (time: string) => {
     const [h, m] = time.split(":").map(Number);
@@ -111,6 +113,9 @@ export function TimetableGrid({
                     );
                     const room = rooms.find((r) => r.id === entry.roomId);
                     const batch = batches.find((b) => b.id === entry.batchId);
+                    const course = entry.courseId
+                      ? courses.find((c) => c.id === entry.courseId)
+                      : null;
                     const colorClass =
                       BLOCK_COLORS[entryColorMap[entry.subjectId] ?? 0];
                     const durationHours =
@@ -127,7 +132,7 @@ export function TimetableGrid({
                           e.key === "Enter" && onEntryClick?.(entry)
                         }
                         className={cn(
-                          "rounded-md border px-2 py-1 text-[10px] leading-tight cursor-pointer",
+                          "rounded-md border px-2 py-1 text-[10px] leading-tight cursor-pointer w-full text-left",
                           "hover:brightness-95 transition-all",
                           colorClass,
                         )}
@@ -136,7 +141,9 @@ export function TimetableGrid({
                             ? `${durationHours * 44}px`
                             : `${durationHours * 58}px`,
                         }}
-                        title={`${subject?.name} — ${room?.name} — ${batch?.name}`}
+                        title={`${subject?.name} — ${room?.name} — ${batch?.name}${
+                          course ? ` — ${course.name}` : ""
+                        }`}
                       >
                         <div className="font-semibold truncate">
                           {subject?.code ?? "—"}
@@ -149,6 +156,11 @@ export function TimetableGrid({
                             <div className="truncate opacity-70">
                               {batch?.name}
                             </div>
+                            {course && (
+                              <div className="truncate opacity-60 text-[9px] font-medium mt-0.5">
+                                {course.name}
+                              </div>
+                            )}
                           </>
                         )}
                       </button>

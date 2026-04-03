@@ -81,6 +81,8 @@ export interface TimetableEntry {
   startTime: string; // "09:00"
   endTime: string; // "10:00"
   weekType: "odd" | "even" | "all";
+  departmentId?: string;
+  courseId?: string;
 }
 
 export type BillStatus =
